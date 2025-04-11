@@ -1,0 +1,189 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+  <meta charset="UTF-8">
+  <title>Фэнтези Арена v2</title>
+  <style>
+    body { margin: 0; overflow: hidden; font-family: sans-serif; }
+    canvas { background: #111; display: block; }
+    #ui, #hud {
+      position: absolute; color: white; z-index: 10; padding: 10px;
+    }
+    #ui { top: 0; left: 0; }
+    #hud { top: 0; right: 0; background: rgba(0, 0, 0, 0.5); }
+    .btn {
+      padding: 10px; margin: 3px;
+      background: #444; color: white;
+      border: none; border-radius: 5px;
+    }
+  </style>
+</head>
+<body>
+<audio id="bgMusic" src="https://cdn.pixabay.com/download/audio/2022/10/20/audio_d726ed82ac.mp3?filename=8bit-background-music-124008.mp3" autoplay loop></audio>
+<audio id="hitSound" src="https://cdn.pixabay.com/download/audio/2022/03/15/audio_69b16c95dc.mp3?filename=punch-140236.mp3"></audio>
+<canvas id="game" width="800" height="400"></canvas>
+<div id="ui">
+  <div id="choose">
+    <p>Выбери героя:</p>
+    <button class="btn" onclick="choose('warrior')">Воин</button>
+    <button class="btn" onclick="choose('archer')">Лучник</button>
+    <button class="btn" onclick="choose('mage')">Маг</button>
+  </div>
+  <div id="controls" style="display:none;">
+    <button class="btn" onclick="moveLeft()">←</button>
+    <button class="btn" onclick="jump()">↑</button>
+    <button class="btn" onclick="moveRight()">→</button>
+    <button class="btn" onclick="attack()">Атака</button>
+    <button class="btn" onclick="special()">Супер</button>
+  </div>
+</div>
+<div id="hud"></div>
+
+<script>
+const canvas = document.getElementById("game");
+const ctx = canvas.getContext("2d");
+const hitSound = document.getElementById("hitSound");
+
+let player = null;
+let enemies = [];
+let level = 1;
+let gameTick = 0;
+
+function choose(type) {
+  const types = {
+    warrior: { color: "red", special: "Бешенство" },
+    archer: { color: "green", special: "Тройной выстрел" },
+    mage: { color: "blue", special: "Фаербол" }
+  };
+  player = {
+    x: 100, y: 300, vx: 0, vy: 0, width: 30, height: 50,
+    type: type, color: types[type].color,
+    special: types[type].special,
+    onGround: false,
+    level: 1, exp: 0, expToNext: 100,
+    maxHealth: 100, currentHealth: 100,
+    attackPower: 10
+  };
+  document.getElementById("choose").style.display = "none";
+  document.getElementById("controls").style.display = "block";
+}
+
+function moveLeft() { if (player) player.vx = -3; }
+function moveRight() { if (player) player.vx = 3; }
+function jump() { if (player && player.onGround) { player.vy = -10; player.onGround = false; } }
+
+function attack() {
+  if (!player) return;
+  enemies.forEach(enemy => {
+    if (Math.abs(player.x - enemy.x) < 40 && Math.abs(player.y - enemy.y) < 40) {
+      enemy.currentHealth -= player.attackPower;
+      try { hitSound.play(); } catch(e) {}
+    }
+  });
+}
+
+function special() {
+  if (!player) return;
+  alert("Суперспособность: " + player.special);
+}
+
+function createEnemy() {
+  const types = ["goblin", "orc", "mage"];
+  const type = types[Math.floor(Math.random() * types.length)];
+  let baseHealth = 50 + level * 10;
+  let attackPower = 5 + level * 2;
+  let color = "green";
+  if (type === "orc") { baseHealth *= 1.5; attackPower *= 1.2; color = "darkgreen"; }
+  if (type === "mage") { attackPower *= 1.5; color = "purple"; }
+  enemies.push({
+    type, x: canvas.width, y: 300, width: 30, height: 50,
+    currentHealth: baseHealth, maxHealth: baseHealth,
+    attackPower, speed: 1 + Math.random(),
+    color
+  });
+}
+
+function gainExp(amount) {
+  player.exp += amount;
+  if (player.exp >= player.expToNext) {
+    player.level++;
+    level++;
+    player.exp = 0;
+    player.expToNext *= 1.5;
+    player.maxHealth += 20;
+    player.attackPower += 5;
+    player.currentHealth = player.maxHealth;
+  }
+}
+
+function update() {
+  if (!player) return;
+  player.vy += 0.5;
+  player.x += player.vx;
+  player.y += player.vy;
+  if (player.y + player.height >= canvas.height) {
+    player.y = canvas.height - player.height;
+    player.vy = 0;
+    player.onGround = true;
+  }
+  player.vx *= 0.8;
+
+  enemies.forEach(enemy => {
+    enemy.x -= enemy.speed;
+    if (Math.abs(enemy.x - player.x) < 30) {
+      player.currentHealth -= enemy.attackPower * 0.05;
+    }
+  });
+
+  enemies = enemies.filter(e => {
+    if (e.currentHealth <= 0) {
+      gainExp(20);
+      return false;
+    }
+    return true;
+  });
+
+  gameTick++;
+  if (gameTick % 180 === 0) createEnemy();
+
+  drawHUD();
+
+  if (player.currentHealth <= 0) {
+    alert("Вы проиграли!");
+    location.reload();
+  }
+}
+
+function drawHUD() {
+  const hud = document.getElementById("hud");
+  hud.innerHTML = `
+    <b>Уровень:</b> ${player.level} |
+    <b>Опыт:</b> ${Math.floor(player.exp)} / ${Math.floor(player.expToNext)} |
+    <b>Здоровье:</b> ${Math.floor(player.currentHealth)} / ${player.maxHealth} |
+    <b>Этап игры:</b> ${level}
+  `;
+}
+
+function draw() {
+  ctx.clearRect(0, 0, canvas.width, canvas.height);
+  ctx.fillStyle = "#444";
+  ctx.fillRect(0, canvas.height - 20, canvas.width, 20);
+  if (player) {
+    ctx.fillStyle = player.color;
+    ctx.fillRect(player.x, player.y, player.width, player.height);
+  }
+  enemies.forEach(enemy => {
+    ctx.fillStyle = enemy.color;
+    ctx.fillRect(enemy.x, enemy.y, enemy.width, enemy.height);
+  });
+}
+
+function gameLoop() {
+  update();
+  draw();
+  requestAnimationFrame(gameLoop);
+}
+gameLoop();
+</script>
+</body>
+</html>
